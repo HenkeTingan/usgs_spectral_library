@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import signal
+from geochemical_plotter import analyze_geochemical_data
 
 def read_wavelength_file(base_path):
     """Read the wavelength values from the standard wavelength file."""
@@ -38,9 +39,13 @@ def calculate_derivative(wavelength, reflectance, window_length=5, polyorder=2):
         print(f"Error calculating derivative: {str(e)}")
         return None
 
-def plot_spectra(spectra_data, wavelengths, title, output_file, derivative=False):
-    """Plot multiple spectra on the same graph."""
+def plot_swir_spectra(spectra_data, wavelengths, title, output_file, derivative=False):
+    """Plot multiple spectra focusing on the SWIR region (1.4-2.5 μm)."""
     try:
+        # Filter wavelengths for SWIR region
+        swir_mask = (wavelengths >= 1.4) & (wavelengths <= 2.5)
+        swir_wavelengths = wavelengths[swir_mask]
+        
         plt.figure(figsize=(12, 6))
         for mineral, reflectance in spectra_data.items():
             if derivative:
@@ -49,7 +54,13 @@ def plot_spectra(spectra_data, wavelengths, title, output_file, derivative=False
                     continue
             else:
                 y_data = reflectance
-            plt.plot(wavelengths, y_data, label=os.path.basename(mineral))
+            
+            # Filter reflectance data for SWIR region
+            swir_reflectance = y_data[swir_mask]
+            
+            # Get mineral name from file path
+            mineral_name = os.path.basename(mineral).split('_')[0]
+            plt.plot(swir_wavelengths, swir_reflectance, label=mineral_name)
         
         plt.xlabel('Wavelength (μm)')
         plt.ylabel('First Derivative' if derivative else 'Reflectance')
@@ -59,19 +70,16 @@ def plot_spectra(spectra_data, wavelengths, title, output_file, derivative=False
         plt.tight_layout()
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         plt.close()
-        print(f"Successfully saved plot to {output_file}")
+        print(f"Successfully saved SWIR plot to {output_file}")
     except Exception as e:
-        print(f"Error plotting spectra: {str(e)}")
+        print(f"Error plotting SWIR spectra: {str(e)}")
 
 def find_mineral_files(mineral_name, base_path):
     """Find all files related to a specific mineral."""
     mineral_files = []
     try:
-        # Look for files containing the mineral name (case insensitive)
-        # and ending with specific extensions
         for root, _, files in os.walk(base_path):
             for file in files:
-                # Look for ASDFR files (standard resolution) with AREF (absolute reflectance)
                 if (mineral_name.lower() in file.lower() and 
                     file.endswith('.txt') and 
                     'ASDFR' in file and 
@@ -87,18 +95,15 @@ def process_mineral_data(mineral_name, base_path, wavelengths):
     mineral_data = {}
     print(f"\nLooking for {mineral_name} in {base_path}")
     
-    # Check if directory exists
     if not os.path.exists(base_path):
         print(f"Directory not found: {base_path}")
         return mineral_data
     
-    # Find all relevant files
     mineral_files = find_mineral_files(mineral_name, base_path)
     print(f"Found {len(mineral_files)} files for {mineral_name}:")
     for file in mineral_files:
         print(f"  {os.path.basename(file)}")
     
-    # Process each file
     for file_path in mineral_files:
         reflectance = read_spectral_file(file_path)
         if reflectance is not None and len(reflectance) > 0:
@@ -145,38 +150,22 @@ def main():
             print(f"Found {len(mineral_data)} samples for {mineral}")
             all_mineral_data[mineral] = mineral_data
             
-            # Plot individual mineral spectra
-            plot_spectra(
+            # Plot individual mineral spectra (SWIR region only)
+            plot_swir_spectra(
                 mineral_data,
                 wavelengths,
-                f'{mineral.capitalize()} Spectra',
-                f'{mineral}_spectra.png'
+                f'{mineral.capitalize()} SWIR Spectra',
+                f'{mineral}_swir_spectra.png'
             )
             
-            # Plot derivative spectra
-            plot_spectra(
+            # Plot individual mineral derivative spectra (SWIR region only)
+            plot_swir_spectra(
                 mineral_data,
                 wavelengths,
-                f'{mineral.capitalize()} Derivative Spectra',
-                f'{mineral}_derivative.png',
+                f'{mineral.capitalize()} SWIR Derivative Spectra',
+                f'{mineral}_swir_derivative.png',
                 derivative=True
             )
-            
-            # Save processed data
-            for sample_name, reflectance in mineral_data.items():
-                output_name = f'{mineral}_{os.path.basename(sample_name).replace(".txt", "")}_processed.csv'
-                try:
-                    df = pd.DataFrame({
-                        'wavelength': wavelengths,
-                        'reflectance': reflectance,
-                        'derivative': calculate_derivative(wavelengths, reflectance)
-                    })
-                    df.to_csv(output_name, index=False)
-                    print(f"Saved processed data to {output_name}")
-                except Exception as e:
-                    print(f"Error saving processed data: {str(e)}")
-        else:
-            print(f"No data found for {mineral}")
     
     # Plot all minerals together
     if all_mineral_data:
@@ -187,22 +176,25 @@ def main():
                 first_spectrum = list(spectra.items())[0]
                 combined_data[mineral] = first_spectrum[1]
         
-        # Plot combined spectra
-        plot_spectra(
+        # Plot combined spectra (SWIR region only)
+        plot_swir_spectra(
             combined_data,
             wavelengths,
-            'Combined Mineral Spectra',
-            'combined_spectra.png'
+            'Combined Mineral SWIR Spectra',
+            'combined_swir_spectra.png'
         )
         
-        # Plot combined derivative spectra
-        plot_spectra(
+        # Plot combined derivative spectra (SWIR region only)
+        plot_swir_spectra(
             combined_data,
             wavelengths,
-            'Combined Mineral Derivative Spectra',
-            'combined_derivative.png',
+            'Combined Mineral SWIR Derivative Spectra',
+            'combined_swir_derivative.png',
             derivative=True
         )
+
+    # Replace with your Excel file path
+    analyze_geochemical_data("your_data.xlsx")
 
 if __name__ == "__main__":
     main() 
